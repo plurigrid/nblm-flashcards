@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+flashcards/*.json
+flashcards/*.md
+flashcards/chunk-*/
+flashcards/.drill-state*.json
