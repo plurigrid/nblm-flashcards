@@ -1,0 +1,263 @@
+;; nblm_flashcards.lpy — Generate flashcards from NotebookLM Enterprise (Basilisp)
+;;
+;; Usage:
+;;   basilisp run nblm_flashcards.lpy
+;;   basilisp run nblm_flashcards.lpy -- --per-source 10 --batch-size 5
+
+(import subprocess json sys os time argparse pathlib builtins)
+
+;; ═══ Config ═══
+
+(def PROJECT-NUMBER "302712368086")
+(def PROJECT-ID "merovingians")
+(def REGION "us-central1")
+(def GEMINI-MODEL "gemini-2.5-flash")
+(def NOTEBOOK-ID "9ca780dc-4e0f-4f57-9262-a6090af028e4")
+(def OUTPUT-DIR (.Path pathlib "/Users/alice/worlds/n/nblm-flashcards/flashcards"))
+
+;; ═══ Helpers ═══
+
+(defn pyslice
+  "Python-style string/list slicing."
+  [s start end]
+  (let [n (count s)
+        start (if (neg? start) (max 0 (+ n start)) (min start n))
+        end (if (nil? end) n (if (neg? end) (max 0 (+ n end)) (min end n)))]
+    (if (string? s)
+      (apply str (map (fn [i] (nth s i)) (range start end)))
+      (vec (map (fn [i] (nth s i)) (range start end))))))
+
+(defn chunk [coll n]
+  (loop [remaining (vec coll) result []]
+    (if (empty? remaining)
+      result
+      (recur (vec (drop n remaining))
+             (conj result (vec (take n remaining)))))))
+
+;; ═══ Auth ═══
+
+(defn get-token []
+  (let [r (.run subprocess ["gcloud" "auth" "print-access-token"]
+                ** :capture_output true :text true :timeout 30)]
+    (.strip (.-stdout r))))
+
+(def token-state (atom {:token nil :time 0}))
+
+(defn fresh-token []
+  (let [now (/ (.time time) 1)
+        st @token-state]
+    (when (or (nil? (:token st)) (> (- now (:time st)) 1800))
+      (reset! token-state {:token (get-token) :time now})))
+  (:token @token-state))
+
+;; ═══ API ═══
+
+(defn curl-json [& args]
+  "Run curl and parse JSON response."
+  (let [r (.run subprocess (vec args) ** :capture_output true :text true :timeout 300)]
+    (try (.loads json (.-stdout r)) (catch Exception _ nil))))
+
+(defn fetch-notebook-sources [token notebook-id]
+  (let [url (str "https://global-discoveryengine.googleapis.com/v1alpha"
+                 "/projects/" PROJECT-NUMBER "/locations/global/notebooks/" notebook-id)
+        data (curl-json "curl" "-s"
+               "-H" (str "Authorization: Bearer " token)
+               "-H" (str "x-goog-user-project: " PROJECT-ID) url)
+        sources (or (get data "sources") [])]
+    (vec (map (fn [s]
+                (let [sid (or (get s "sourceId") {})
+                      title (or (get s "title") (get sid "id" "unknown"))]
+                  {"title" title "url" (str "https://deepwiki.com/" title)}))
+              sources))))
+
+(defn gemini-generate [token prompt model]
+  (let [url (str "https://" REGION "-aiplatform.googleapis.com"
+                 "/v1/projects/" PROJECT-NUMBER "/locations/" REGION
+                 "/publishers/google/models/" model ":generateContent")
+        payload (.dumps json {"contents" [{"role" "user" "parts" [{"text" prompt}]}]
+                              "generationConfig" {"maxOutputTokens" 65536
+                                                  "temperature" 0.7}})
+        resp (curl-json "curl" "-s" "-X" "POST" url
+               "-H" (str "Authorization: Bearer " token)
+               "-H" "Content-Type: application/json"
+               "-H" (str "x-goog-user-project: " PROJECT-ID)
+               "-d" payload)]
+    (when resp
+      (try
+        (-> resp (get "candidates") first (get "content") (get "parts") first (get "text"))
+        (catch Exception _ nil)))))
+
+;; ═══ Prompts ═══
+
+(defn build-flashcard-prompt [sources per-source difficulty]
+  (let [source-list (.join "\n" (map (fn [s] (str "- " (get s "title") ": " (get s "url"))) sources))
+        total (* (count sources) per-source)]
+    (.format "You are a quiz master creating flashcards for a software engineering team.
+
+Below are {} GitHub repositories indexed via DeepWiki.
+
+SOURCES:
+{}
+
+Generate exactly {} flashcards per source ({} total) at {} difficulty.
+Every source MUST have exactly {} flashcards.
+
+Return ONLY a valid JSON array.
+Each element: {{\"q\": \"<question>\", \"a\": \"<answer>\", \"repo\": \"<org/repo>\", \"difficulty\": \"{}\"}}
+
+Generate all {} flashcards now:"
+             (count sources) source-list per-source total difficulty per-source difficulty total)))
+
+(defn build-quiz-prompt [sources per-source difficulty]
+  (let [source-list (.join "\n" (map (fn [s] (str "- " (get s "title"))) sources))
+        total (* (count sources) per-source)]
+    (.format "You are creating a multiple-choice quiz about these {} repos:
+
+{}
+
+Generate {} questions per source ({} total) at {} difficulty.
+4 options (A-D), one correct. Every source MUST have {} questions.
+
+Return ONLY a valid JSON array.
+Each element: {{\"q\": \"...\", \"options\": {{\"A\": \"...\", \"B\": \"...\", \"C\": \"...\", \"D\": \"...\"}}, \"answer\": \"<letter>\", \"explanation\": \"...\", \"repo\": \"<org/repo>\"}}
+
+Generate all {} questions now:"
+             (count sources) source-list per-source total difficulty per-source total)))
+
+;; ═══ JSON parsing with truncation repair ═══
+
+(defn parse-json-response [text]
+  (let [cleaned (.strip text)
+        lines (.split cleaned "\n")
+        cleaned (if (.startswith cleaned "```")
+                  (let [last-line (.strip (last lines))]
+                    (if (.startswith last-line "```")
+                      (.join "\n" (pyslice lines 1 -1))
+                      (.join "\n" (rest lines))))
+                  cleaned)
+        cleaned (if (.startswith (.strip cleaned) "json")
+                  (.strip (pyslice (.strip cleaned) 4 nil))
+                  (.strip cleaned))]
+    (try
+      (.loads json cleaned)
+      (catch Exception _
+        (let [start (.find cleaned "[")]
+          (if (neg? start)
+            (do (.write (.-stderr sys) "ERROR: no JSON array found\n") [])
+            (let [arr-text (pyslice cleaned start nil)]
+              (try
+                (.loads json arr-text)
+                (catch Exception _
+                  (let [last-obj (.rfind arr-text "}")]
+                    (if (neg? last-obj)
+                      (do (.write (.-stderr sys) "ERROR: no complete object\n") [])
+                      (let [repaired (str (pyslice arr-text 0 (inc last-obj)) "\n]")]
+                        (try
+                          (let [result (.loads json repaired)]
+                            (.write (.-stderr sys) (str "WARN: repaired JSON, got " (count result) " items\n"))
+                            result)
+                          (catch Exception _
+                            (.write (.-stderr sys) "ERROR: could not repair JSON\n")
+                            []))))))))))))))
+
+;; ═══ Batched generation ═══
+
+(defn generate-batched [sources per-source batch-size difficulty model prompt-fn label]
+  (let [batches (chunk sources batch-size)
+        total-expected (* (count sources) per-source)
+        all-items (atom [])]
+    (print (str "  " (count batches) " batches, " per-source "/source = " total-expected " target"))
+    (doseq [[i batch] (map-indexed vector batches)]
+      (let [tok (fresh-token)
+            batch-target (* (count batch) per-source)]
+        (print (str "  [" (inc i) "/" (count batches) "] " (count batch) " sources, expecting " batch-target " " label "...") ** :flush true)
+        (let [prompt (prompt-fn batch per-source difficulty)
+              raw (gemini-generate tok prompt model)]
+          (if (nil? raw)
+            (print (str "    WARN: batch " (inc i) " nil"))
+            (let [items (or (parse-json-response raw) [])]
+              (print (str "    got " (count items)))
+              (swap! all-items into items)))))
+      (.sleep time 1))
+    (print (str "  Total: " (count @all-items) " " label))
+    @all-items))
+
+;; ═══ Output ═══
+
+(defn save-json [data path]
+  (let [f (.open builtins (str path) "w")]
+    (try
+      (.write f (.dumps json data ** :indent 2 :ensure_ascii false))
+      (finally (.close f))))
+  (print (str "  Saved: " path)))
+
+(defn save-markdown [data path artifact-type]
+  (let [f (.open builtins (str path) "w")]
+    (try
+      (do
+        (.write f (str "# " artifact-type "\n\n---\n\n"))
+        (if (= artifact-type "Flashcards")
+          (doseq [[i card] (map-indexed vector data)]
+            (let [repo-tag (if (contains? card "repo") (str " [" (get card "repo") "]") "")
+                  q (or (get card "q") "?")
+                  a (or (get card "a") "?")]
+              (.write f (str "### Card " (inc i) repo-tag "\n\n**Q:** " q "\n\n**A:** " a "\n\n---\n\n"))))
+          (doseq [[i item] (map-indexed vector data)]
+            (let [repo-tag (if (contains? item "repo") (str " [" (get item "repo") "]") "")]
+              (.write f (str "### Question " (inc i) repo-tag "\n\n"))
+              (doseq [[k v] (.items (or (get item "options") {}))]
+                (.write f (str "- **" k ".** " v "\n")))
+              (.write f (str "\n**Answer:** " (or (get item "answer") "?") "\n\n---\n\n"))))))
+      (finally (.close f))))
+  (print (str "  Saved: " path)))
+
+;; ═══ Main ═══
+
+(defn -main []
+  (let [p (.ArgumentParser argparse ** :description "NBLM Flashcard Generator (Basilisp)")]
+    (.add_argument p "--notebook-id" ** :default NOTEBOOK-ID)
+    (.add_argument p "--per-source" ** :type int :default 10)
+    (.add_argument p "--batch-size" ** :type int :default 5)
+    (.add_argument p "--difficulty" ** :default "hard")
+    (.add_argument p "--model" ** :default GEMINI-MODEL)
+    (.add_argument p "--output-dir" ** :default (str OUTPUT-DIR))
+    (let [args (.parse_args p)
+          outdir (.Path pathlib (.-output_dir args))]
+      (.mkdir outdir ** :parents true :exist_ok true)
+
+      (print "=== nblm_flashcards.lpy -- Basilisp Flashcard Generator ===")
+      (print)
+
+      (print "[1/4] Authenticating...")
+      (let [token (get-token)]
+        (when (pos? (count token))
+          (print (str "  Token: " (pyslice token 0 12) "..." (pyslice token -4 nil))))
+        (print)
+
+        (print (str "[2/4] Fetching sources from " (.-notebook_id args) "..."))
+        (let [sources (fetch-notebook-sources token (.-notebook_id args))]
+          (print (str "  Found " (count sources) " sources"))
+          (print)
+
+          (when (zero? (count sources))
+            (.write (.-stderr sys) "FATAL: no sources\n")
+            (.exit sys 1))
+
+          (print (str "[3/4] Flashcards via " (.-model args) "..."))
+          (let [flashcards (generate-batched sources (.-per_source args) (.-batch_size args)
+                                              (.-difficulty args) (.-model args)
+                                              build-flashcard-prompt "flashcards")]
+            (print)
+            (save-json flashcards (str outdir "/flashcards.json"))
+            (print)
+
+            (print (str "[4/4] Quiz via " (.-model args) "..."))
+            (let [quiz (generate-batched sources (.-per_source args) (.-batch_size args)
+                                          (.-difficulty args) (.-model args)
+                                          build-quiz-prompt "quiz questions")]
+              (print)
+              (save-json quiz (str outdir "/quiz.json"))
+              (print)
+              (print (str "Done. " (count flashcards) " flashcards + " (count quiz) " quiz.")))))))))
+
+(-main)
