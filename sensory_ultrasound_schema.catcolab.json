@@ -1,0 +1,255 @@
+{
+  "schema": "sensory_ultrasound_stimulation",
+  "theory": "Schema",
+  "description": "CatColab schema for non-invasive sensory stimulation across all five senses via tFUS and related modalities",
+
+  "entities": [
+    {"name": "Sense", "description": "One of the five sensory modalities"},
+    {"name": "BrainTarget", "description": "Neural structure targeted for stimulation"},
+    {"name": "Transducer", "description": "Energy delivery device (ultrasound probe, electrode, etc.)"},
+    {"name": "CouplingMethod", "description": "How energy is coupled to the skull/body"},
+    {"name": "PulseProtocol", "description": "Stimulation waveform parameters"},
+    {"name": "SafetyConstraint", "description": "Limits to avoid tissue damage or off-target effects"},
+    {"name": "Percept", "description": "Sensation induced in the subject"},
+    {"name": "Setup", "description": "Complete hardware+protocol configuration for one sense"},
+    {"name": "Person", "description": "Researcher, subject, or collaborator"},
+    {"name": "Blocker", "description": "What prevents reproduction of this setup"},
+    {"name": "Resource", "description": "Equipment, facility, or expertise needed"}
+  ],
+
+  "attr_types": [
+    {"name": "String", "description": "Text values"},
+    {"name": "Float", "description": "Numeric measurements"},
+    {"name": "Bool", "description": "True/false"},
+    {"name": "TRL", "description": "Technology Readiness Level 1-9"},
+    {"name": "Trit", "description": "GF(3) value: -1, 0, +1"}
+  ],
+
+  "mappings": [
+    {"name": "targets", "dom": "Setup", "cod": "BrainTarget", "description": "which neural structure this setup stimulates"},
+    {"name": "stimulates", "dom": "Setup", "cod": "Sense", "description": "which sense this setup induces"},
+    {"name": "uses_transducer", "dom": "Setup", "cod": "Transducer", "description": "energy delivery hardware"},
+    {"name": "uses_coupling", "dom": "Setup", "cod": "CouplingMethod", "description": "how energy reaches target"},
+    {"name": "follows_protocol", "dom": "Setup", "cod": "PulseProtocol", "description": "stimulation waveform"},
+    {"name": "produces", "dom": "Setup", "cod": "Percept", "description": "what the subject experiences"},
+    {"name": "constrained_by", "dom": "Setup", "cod": "SafetyConstraint", "description": "safety limits"},
+    {"name": "blocked_by", "dom": "Setup", "cod": "Blocker", "description": "what prevents reproduction"},
+    {"name": "requires", "dom": "Blocker", "cod": "Resource", "description": "what resource unblocks this"},
+    {"name": "owned_by", "dom": "Resource", "cod": "Person", "description": "who has access to this resource"},
+    {"name": "validated_by", "dom": "Percept", "cod": "Person", "description": "who confirmed this percept"},
+    {"name": "sense_of", "dom": "BrainTarget", "cod": "Sense", "description": "which sense this structure processes"}
+  ],
+
+  "attributes": [
+    {"name": "sense_name", "dom": "Sense", "cod": "String"},
+    {"name": "receptor_count", "dom": "Sense", "cod": "Float", "description": "number of distinct receptor types"},
+    {"name": "bandwidth_bits", "dom": "Sense", "cod": "Float", "description": "estimated information channel width"},
+
+    {"name": "target_name", "dom": "BrainTarget", "cod": "String"},
+    {"name": "depth_mm", "dom": "BrainTarget", "cod": "Float"},
+    {"name": "size_mm", "dom": "BrainTarget", "cod": "Float"},
+    {"name": "accessible", "dom": "BrainTarget", "cod": "Bool", "description": "reachable non-invasively"},
+
+    {"name": "transducer_type", "dom": "Transducer", "cod": "String"},
+    {"name": "frequency_khz", "dom": "Transducer", "cod": "Float"},
+    {"name": "cost_usd", "dom": "Transducer", "cod": "Float"},
+
+    {"name": "coupling_type", "dom": "CouplingMethod", "cod": "String"},
+
+    {"name": "pulse_cycles", "dom": "PulseProtocol", "cod": "Float"},
+    {"name": "prf_hz", "dom": "PulseProtocol", "cod": "Float", "description": "pulse repetition frequency"},
+    {"name": "focal_depth_mm", "dom": "PulseProtocol", "cod": "Float"},
+    {"name": "steering_deg", "dom": "PulseProtocol", "cod": "Float"},
+    {"name": "pressure_kpa", "dom": "PulseProtocol", "cod": "Float"},
+    {"name": "mechanical_index", "dom": "PulseProtocol", "cod": "Float"},
+
+    {"name": "constraint_type", "dom": "SafetyConstraint", "cod": "String"},
+    {"name": "limit_value", "dom": "SafetyConstraint", "cod": "String"},
+
+    {"name": "percept_description", "dom": "Percept", "cod": "String"},
+    {"name": "percept_strength", "dom": "Percept", "cod": "String"},
+    {"name": "blind_validated", "dom": "Percept", "cod": "Bool"},
+
+    {"name": "setup_name", "dom": "Setup", "cod": "String"},
+    {"name": "trl", "dom": "Setup", "cod": "TRL"},
+    {"name": "trit", "dom": "Setup", "cod": "Trit"},
+    {"name": "reference_url", "dom": "Setup", "cod": "String"},
+    {"name": "n_subjects", "dom": "Setup", "cod": "Float"},
+
+    {"name": "person_name", "dom": "Person", "cod": "String"},
+    {"name": "affiliation", "dom": "Person", "cod": "String"},
+
+    {"name": "blocker_description", "dom": "Blocker", "cod": "String"},
+    {"name": "resource_name", "dom": "Resource", "cod": "String"},
+    {"name": "resource_available", "dom": "Resource", "cod": "Bool"}
+  ],
+
+  "instances": {
+    "senses": [
+      {"id": "olfactory",      "sense_name": "Smell",   "receptor_count": 400, "bandwidth_bits": 400},
+      {"id": "auditory",        "sense_name": "Hearing", "receptor_count": 3500, "bandwidth_bits": 20000},
+      {"id": "somatosensory",   "sense_name": "Touch",   "receptor_count": 17000, "bandwidth_bits": 1000},
+      {"id": "visual",          "sense_name": "Sight",   "receptor_count": 127000000, "bandwidth_bits": 10000000},
+      {"id": "gustatory",       "sense_name": "Taste",   "receptor_count": 8000, "bandwidth_bits": 5}
+    ],
+
+    "brain_targets": [
+      {"id": "olfactory_bulb",  "target_name": "Olfactory Bulb",         "depth_mm": 39, "size_mm": 14, "accessible": true,  "sense_of": "olfactory"},
+      {"id": "cochlea",         "target_name": "Cochlea / Ear Labyrinth", "depth_mm": 25, "size_mm": 9,  "accessible": true,  "sense_of": "auditory"},
+      {"id": "auditory_cortex", "target_name": "Auditory Cortex (A1)",   "depth_mm": 15, "size_mm": 30, "accessible": true,  "sense_of": "auditory"},
+      {"id": "s1_cortex",       "target_name": "Primary Somatosensory (S1)", "depth_mm": 12, "size_mm": 50, "accessible": true, "sense_of": "somatosensory"},
+      {"id": "v1_cortex",       "target_name": "Primary Visual Cortex (V1)", "depth_mm": 20, "size_mm": 40, "accessible": true, "sense_of": "visual"},
+      {"id": "v5_cortex",       "target_name": "V5/MT (motion)",         "depth_mm": 25, "size_mm": 15, "accessible": true,  "sense_of": "visual"},
+      {"id": "gustatory_cortex","target_name": "Gustatory Cortex (Insula)", "depth_mm": 35, "size_mm": 20, "accessible": true, "sense_of": "gustatory"},
+      {"id": "tongue",          "target_name": "Tongue (peripheral)",    "depth_mm": 0,  "size_mm": 70, "accessible": true,  "sense_of": "gustatory"}
+    ],
+
+    "setups": [
+      {
+        "id": "chizhov_olfactory",
+        "setup_name": "Chizhov Olfactory tFUS",
+        "trl": 4,
+        "trit": 1,
+        "reference_url": "https://writetobrain.com/olfactory",
+        "n_subjects": 2,
+        "stimulates": "olfactory",
+        "targets": "olfactory_bulb",
+        "note": "PROVEN. 4 distinct smells induced, blind-validated. 300kHz, 39mm depth, 150-250kPa. Forehead mount aiming down."
+      },
+      {
+        "id": "gavrilov_somatosensory",
+        "setup_name": "Gavrilov/Lee S1 tFUS",
+        "trl": 5,
+        "trit": 0,
+        "reference_url": "https://preview-www.nature.com/articles/srep08743",
+        "n_subjects": 18,
+        "stimulates": "somatosensory",
+        "targets": "s1_cortex",
+        "note": "PROVEN. 11/18 subjects reported contralateral hand tingling, pressure, movement. Finger-level specificity. Image-guided. Since 2015."
+      },
+      {
+        "id": "lee_visual",
+        "setup_name": "Lee V1 tFUS Phosphenes",
+        "trl": 3,
+        "trit": -1,
+        "reference_url": "https://www.nature.com/articles/s41467-026-69853-8",
+        "n_subjects": 19,
+        "stimulates": "visual",
+        "targets": "v1_cortex",
+        "note": "PARTIAL. 11/19 reported phosphenes (visual percepts). Confounded by auditory artifacts. tFUS alone may be subthreshold for V1 — needs tEAS (combined with tDCS). Mar 2026 Nature Comms clarifies."
+      },
+      {
+        "id": "kosnoff_v5_bci",
+        "setup_name": "Kosnoff V5 tFUS Visual BCI",
+        "trl": 4,
+        "trit": 1,
+        "reference_url": "https://www.npg.nature.com/articles/s41467-024-48576-8",
+        "n_subjects": 27,
+        "stimulates": "visual",
+        "targets": "v5_cortex",
+        "note": "PROVEN for modulation, not percept induction. V5 tFUS reduced BCI speller errors. Enhanced feature-based attention to visual motion. Does not create visual percepts directly."
+      },
+      {
+        "id": "gavrilov_auditory",
+        "setup_name": "Gavrilov Auditory FUS (1970s-2021)",
+        "trl": 5,
+        "trit": 0,
+        "reference_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8041518/",
+        "n_subjects": 50,
+        "stimulates": "auditory",
+        "targets": "auditory_cortex",
+        "note": "PROVEN since 1970s Russia. Amplitude-modulated FUS to cochlea induces tone/speech/music percepts in normal hearing. Low-intensity FUS directly excites auditory cortical neurons (2021 PMC). MAJOR CONFOUND: tFUS to any brain region activates auditory pathways via bone conduction."
+      },
+      {
+        "id": "gustatory_interface",
+        "setup_name": "256-ch Tongue Gustatory Interface",
+        "trl": 4,
+        "trit": -1,
+        "reference_url": "https://www.nature.com/articles/s41467-024-53379-y",
+        "n_subjects": 12,
+        "stimulates": "gustatory",
+        "targets": "tongue",
+        "note": "NOT ultrasound — 256-channel conformal tongue electrodes. Decodes 5 tastes at 97.8% accuracy via EEG+tongue electrophysiology. Nature Comms 2024. Peripheral, not transcranial."
+      },
+      {
+        "id": "trigeminal_smell",
+        "setup_name": "Brooks Trigeminal Electrical Stereo-Smell",
+        "trl": 4,
+        "trit": -1,
+        "reference_url": "https://dl.acm.org/doi/10.1145/3411764.3445300",
+        "n_subjects": 15,
+        "stimulates": "olfactory",
+        "targets": "tongue",
+        "note": "ALTERNATIVE to Chizhov. Electrical stimulation of nasal septum trigeminal nerve. Creates thermal sensations (hot pepper, cooling mint) that fuse with olfactory percepts. UChicago HCI Lab, CHI 2021. Uses odorless chemicals + microfluidics on VR headset."
+      }
+    ],
+
+    "percepts": [
+      {"id": "fresh_air",     "percept_description": "Fresh air, oxygen-rich",        "percept_strength": "sensation", "blind_validated": true,  "validated_by": "lev_chizhov"},
+      {"id": "garbage",       "percept_description": "Garbage, few-day-old fruit peels","percept_strength": "smell",     "blind_validated": true,  "validated_by": "albert_yan_huang"},
+      {"id": "ozone",         "percept_description": "Ozone, air ionizer",            "percept_strength": "sensation", "blind_validated": true,  "validated_by": "lev_chizhov"},
+      {"id": "campfire",      "percept_description": "Campfire, burning wood",         "percept_strength": "smell",     "blind_validated": true,  "validated_by": "albert_yan_huang"},
+      {"id": "hand_tingling", "percept_description": "Contralateral hand tingling",    "percept_strength": "strong",    "blind_validated": false, "validated_by": "lee_lab"},
+      {"id": "finger_pressure","percept_description": "Pressure on specific finger",   "percept_strength": "moderate",  "blind_validated": false, "validated_by": "lee_lab"},
+      {"id": "phosphene",     "percept_description": "Flash of light / phosphene",     "percept_strength": "weak",      "blind_validated": false, "validated_by": "schimek_lab"},
+      {"id": "tone",          "percept_description": "Pure tone, audible pitch",       "percept_strength": "strong",    "blind_validated": true,  "validated_by": "gavrilov_lab"},
+      {"id": "speech",        "percept_description": "Speech-like auditory percept",   "percept_strength": "moderate",  "blind_validated": false, "validated_by": "gavrilov_lab"},
+      {"id": "hot_pepper",    "percept_description": "Hot pepper thermal on nose",     "percept_strength": "strong",    "blind_validated": true,  "validated_by": "brooks_lab"},
+      {"id": "cool_mint",     "percept_description": "Cooling mint sensation on nose", "percept_strength": "strong",    "blind_validated": true,  "validated_by": "brooks_lab"},
+      {"id": "sweet",         "percept_description": "Sweet taste decoded from EEG",   "percept_strength": "decoded",   "blind_validated": true,  "validated_by": "zhou_lab"}
+    ],
+
+    "persons": [
+      {"id": "lev_chizhov",      "person_name": "Lev Chizhov",            "affiliation": "Write to Brain / MIPT"},
+      {"id": "albert_yan_huang", "person_name": "Albert Yan-Huang",       "affiliation": "Write to Brain"},
+      {"id": "aayush_gupta",     "person_name": "Aayush Gupta",           "affiliation": "Write to Brain"},
+      {"id": "thomas_ribeiro",   "person_name": "Thomas Ribeiro",         "affiliation": "Write to Brain"},
+      {"id": "luca_turin",       "person_name": "Luca Turin",             "affiliation": "Independent (perfumery/vibration theory)"},
+      {"id": "yoyo_yuan",        "person_name": "Yoyo Yuan",              "affiliation": "Stanford"},
+      {"id": "barton",           "person_name": "barton!!!",              "affiliation": "IES / Basin / Vivarium"},
+      {"id": "alice",            "person_name": "alice",                  "affiliation": "Vivarium"},
+      {"id": "morgan_hough",     "person_name": "Morgan Hough",           "affiliation": "Frontier Tower / NeurotechSF"},
+      {"id": "jo",               "person_name": "Jo",                     "affiliation": "Longevity / dry electrode EEG group"},
+      {"id": "legon_lab",        "person_name": "Wynn Legon",             "affiliation": "Virginia Tech"},
+      {"id": "lee_lab",          "person_name": "Seung-Schik Yoo / Wonhye Lee", "affiliation": "Harvard/BWH"},
+      {"id": "gavrilov_lab",     "person_name": "Leonid Gavrilov",        "affiliation": "Andreyev Acoustics Institute, Moscow"},
+      {"id": "brooks_lab",       "person_name": "Jas Brooks",             "affiliation": "UChicago HCI Lab"},
+      {"id": "zhou_lab",         "person_name": "Zhitao Zhou",            "affiliation": "Nature Comms 2024 gustatory interface"}
+    ],
+
+    "blockers_and_resources": [
+      {"blocker": "no_300khz_transducer",  "description": "Need 300kHz focused US probe",         "resource": "sonic_concepts_probe", "resource_name": "Sonic Concepts H-115 or custom 300kHz",  "cost": 2000, "available": false, "owned_by": null},
+      {"blocker": "no_pulse_driver",       "description": "Need waveform generator + RF amp",     "resource": "rigol_awg",            "resource_name": "Rigol DG1022Z + RF amplifier",           "cost": 500,  "available": false, "owned_by": null},
+      {"blocker": "no_hydrophone",         "description": "Need to characterize focal field",     "resource": "hydrophone",           "resource_name": "Needle hydrophone + water tank",         "cost": 1000, "available": false, "owned_by": "morgan_hough"},
+      {"blocker": "no_mri",                "description": "MRI for targeting (optional)",         "resource": "mri_access",           "resource_name": "MRI scan (Stanford/UCSF)",               "cost": 500,  "available": true,  "owned_by": "yoyo_yuan"},
+      {"blocker": "no_gel_pad",            "description": "Need acoustic coupling pad",           "resource": "ballistic_gel",        "resource_name": "Ballistic gel / agar pad",               "cost": 20,   "available": true,  "owned_by": null},
+      {"blocker": "no_headset_mount",      "description": "Need stable forehead mount",           "resource": "3d_printer",           "resource_name": "3D printer (Noisebridge/Vivarium)",      "cost": 0,    "available": true,  "owned_by": "barton"},
+      {"blocker": "no_eeg",                "description": "Need EEG for validation",              "resource": "eeg_headset",          "resource_name": "Dry electrode EEG headset",              "cost": 0,    "available": true,  "owned_by": "jo"},
+      {"blocker": "no_tongue_electrodes",  "description": "Need 256-ch conformal tongue array",   "resource": "tongue_array",         "resource_name": "Custom flexible tongue electrode array",  "cost": 5000, "available": false, "owned_by": null}
+    ]
+  },
+
+  "gf3_triads": [
+    {
+      "name": "olfactory_triad",
+      "plus": "chizhov_olfactory",
+      "ergodic": "gavrilov_auditory",
+      "minus": "trigeminal_smell",
+      "note": "Two olfactory approaches (transcranial US + peripheral trigeminal) validated by mature auditory US"
+    },
+    {
+      "name": "cortical_triad",
+      "plus": "kosnoff_v5_bci",
+      "ergodic": "gavrilov_somatosensory",
+      "minus": "lee_visual",
+      "note": "Three cortical tFUS approaches at different TRLs — somatosensory is most mature"
+    },
+    {
+      "name": "people_triad",
+      "plus": "yoyo_yuan",
+      "ergodic": "barton",
+      "minus": "morgan_hough",
+      "note": "Yoyo builds, barton coordinates, Morgan provides equipment access"
+    }
+  ]
+}
