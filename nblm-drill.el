@@ -15,7 +15,9 @@
   "NotebookLM flashcard drill."
   :group 'games)
 
-(defvar nblm-drill-dir "/Users/alice/worlds/n/nblm-flashcards/flashcards/"
+(defvar nblm-drill-dir
+  (or (getenv "NBLM_FLASHCARDS_DIR")
+      (expand-file-name "flashcards/" (file-name-directory (or load-file-name buffer-file-name ""))))
   "Directory containing flashcard JSON files.")
 
 (defvar nblm-drill--cards nil "Current deck.")
@@ -157,10 +159,11 @@
           (insert "  "
                   (propertize "[y]" 'face 'nblm-drill-correct) " got it   "
                   (propertize "[n]" 'face 'nblm-drill-wrong) " missed   "
+                  (propertize "[m]" 'face '(:foreground "#d55fde" :weight bold)) " mu (無)   "
                   (propertize "[s]" 'face 'nblm-drill-dim) " skip   "
                   (propertize "[q]" 'face 'nblm-drill-dim) " quit\n"))
       (insert "  "
-              (propertize "[SPC] reveal answer   [q] quit" 'face 'nblm-drill-dim)
+              (propertize "[SPC] reveal   [m] mu (無) unask   [q] quit" 'face 'nblm-drill-dim)
               "\n"))
     (goto-char (point-min))))
 
@@ -306,6 +309,38 @@
   (when (and (eq nblm-drill--mode 'quiz) nblm-drill--quiz-answered)
     (nblm-drill--advance)))
 
+(defvar nblm-drill--mu-count 0 "Number of mu rejections this session.")
+
+(defun nblm-drill--mu-file ()
+  "Path to mu feedback file."
+  (expand-file-name ".mu-feedback.json" nblm-drill-dir))
+
+(defun nblm-drill--mu ()
+  "MU (無) — reject the question's premise, provide feedback."
+  (interactive)
+  (let* ((card (nth nblm-drill--index nblm-drill--cards))
+         (reason (read-string "MU (無) — Why is this question wrong/misleading? ")))
+    (when (and reason (not (string-empty-p reason)))
+      (let* ((existing (if (file-exists-p (nblm-drill--mu-file))
+                           (let ((json-array-type 'list)
+                                 (json-object-type 'alist)
+                                 (json-key-type 'string))
+                             (json-read-file (nblm-drill--mu-file)))
+                         nil))
+             (entry `(("q" . ,(or (alist-get "q" card nil nil #'equal) ""))
+                      ("a" . ,(or (alist-get "a" card nil nil #'equal) ""))
+                      ("repo" . ,(or (alist-get "repo" card nil nil #'equal) ""))
+                      ("mu_reason" . ,reason)
+                      ("driller" . ,(user-login-name))
+                      ("timestamp" . ,(format-time-string "%Y-%m-%dT%H:%M:%SZ" nil t))))
+             (updated (append existing (list entry)))
+             (json-encoding-pretty-print t))
+        (with-temp-file (nblm-drill--mu-file)
+          (insert (json-encode (vconcat updated)))))
+      (cl-incf nblm-drill--mu-count)
+      (message "MU saved. %d rejections this session." nblm-drill--mu-count))
+    (nblm-drill--advance)))
+
 (defun nblm-drill-quit ()
   "Quit drill session."
   (interactive)
@@ -322,6 +357,7 @@
     (define-key map (kbd "y") #'nblm-drill--mark-correct)
     (define-key map (kbd "n") #'nblm-drill--mark-wrong)
     (define-key map (kbd "s") #'nblm-drill--skip)
+    (define-key map (kbd "m") #'nblm-drill--mu)
     (define-key map (kbd "q") #'nblm-drill-quit)
     ;; quiz
     (define-key map (kbd "a") #'nblm-drill--quiz-a)
